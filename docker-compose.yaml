@@ -1,0 +1,10 @@
+services:
+  chatgpt-register:
+    build: .
+    container_name: chatgpt-register
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
