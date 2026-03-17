@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ChatGPT 注册管理 · 批量注册</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="min-h-screen">
+
+<div class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- 页头 -->
+  <div class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm">C</div>
+      <div>
+        <h1 class="text-[17px] font-bold text-gray-900 leading-tight">ChatGPT 注册管理</h1>
+        <p class="text-xs text-gray-400 mt-0.5">批量注册 · 账号管理 · Token 管理</p>
+      </div>
+    </div>
+    <div id="header-actions" class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-full px-3 py-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <span class="text-xs text-green-700 font-medium">运行中</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导航 -->
+  <div class="flex gap-1 mb-5 bg-white rounded-xl border border-gray-200 p-1 w-fit shadow-sm">
+    <a href="/"         class="tab-btn">⚙️ 配置</a>
+    <a href="/register" class="tab-btn active">📝 批量注册</a>
+    <a href="/accounts" class="tab-btn">👥 账号列表</a>
+    <a href="/tokens"   class="tab-btn">🔑 Token 列表</a>
+  </div>
+
+  <!-- 注册控制 -->
+  <div class="card p-6">
+    <h2 class="font-semibold text-gray-800 mb-4">批量注册</h2>
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1.5">注册数量</label>
+        <input id="reg-count" type="number" min="1" value="1" class="inp w-28" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1.5">并发数</label>
+        <input id="reg-concurrency" type="number" min="1" max="10" value="1" class="inp w-24" />
+      </div>
+      <button id="reg-btn" onclick="startRegister()" class="btn btn-success">▶ 开始注册</button>
+      <span id="reg-tip" class="self-center text-xs text-gray-400"></span>
+    </div>
+  </div>
+
+  <!-- 历史任务 -->
+  <div class="card p-6 mt-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold text-gray-700">历史任务</h3>
+      <button onclick="loadTasks()" class="btn btn-ghost btn-sm">↺ 刷新</button>
+    </div>
+    <div class="overflow-x-auto rounded-xl border border-gray-100">
+      <table>
+        <thead>
+          <tr>
+            <th>任务 ID</th>
+            <th>类型</th>
+            <th>状态</th>
+            <th>开始时间</th>
+            <th>结束时间</th>
+            <th>结果</th>
+            <th>日志</th>
+          </tr>
+        </thead>
+        <tbody id="tasks-tbody"></tbody>
+      </table>
+      <div id="tasks-empty" class="text-center py-8 text-gray-400 text-sm hidden">暂无任务记录</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+const _statusLabel = { pending:'等待中', running:'运行中', done:'✓ 完成', error:'✗ 出错' };
+const _statusClass  = { pending:'badge-gray', running:'badge-blue', done:'badge-green', error:'badge-red' };
+
+async function startRegister() {
+  const btn = document.getElementById('reg-btn');
+  const count = parseInt(document.getElementById('reg-count').value) || 1;
+  const concurrency = parseInt(document.getElementById('reg-concurrency').value) || 1;
+  btn.disabled = true;
+  document.getElementById('reg-tip').textContent = '提交中...';
+  try {
+    const { task_id } = await api('POST', '/api/register', { count, concurrency });
+    const entry = openLog(`批量注册 ×${count}`);
+    document.getElementById('reg-tip').textContent = '';
+    startPolling(task_id, entry, t => {
+      btn.disabled = false;
+      if (t.status === 'done') {
+        showToast(`注册完成：成功 ${t.result?.success ?? '?'} | 失败 ${t.result?.fail ?? '?'}`);
+      } else {
+        showToast('注册任务出错', 'error');
+      }
+      setTimeout(loadTasks, 600);
+    });
+  } catch (e) {
+    showToast('启动失败: ' + e.message, 'error');
+    btn.disabled = false;
+    document.getElementById('reg-tip').textContent = '';
+  }
+}
+
+async function loadTasks() {
+  try {
+    const tasks = await api('GET', '/api/tasks');
+    const sorted = tasks.slice().sort((a, b) => (b.started || '').localeCompare(a.started || ''));
+    const tbody = document.getElementById('tasks-tbody');
+    const empty = document.getElementById('tasks-empty');
+    tbody.innerHTML = '';
+    if (!sorted.length) { empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    sorted.forEach(t => {
+      const res = t.result ? JSON.stringify(t.result) : '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="font-mono text-xs text-gray-500">${esc(t.id)}</td>
+        <td class="text-xs">${esc(t.type)}</td>
+        <td><span class="badge ${_statusClass[t.status] || 'badge-gray'}">${_statusLabel[t.status] || t.status}</span></td>
+        <td class="text-xs text-gray-500">${fmtTime(t.started)}</td>
+        <td class="text-xs text-gray-500">${fmtTime(t.ended)}</td>
+        <td class="text-xs text-gray-500 max-w-xs truncate" title="${esc(res)}">${esc(res)}</td>
+        <td><button onclick="viewTaskLog('${esc(t.id)}', '${esc(t.type + ' ' + t.id)}')" class="btn btn-ghost btn-sm">查看</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) { showToast('加载任务失败: ' + e.message, 'error'); }
+}
+
+loadTasks();
+</script>
+</body>
+</html>

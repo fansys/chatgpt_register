@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ChatGPT 注册管理 · 配置</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="min-h-screen">
+
+<div class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- 页头 -->
+  <div class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm">C</div>
+      <div>
+        <h1 class="text-[17px] font-bold text-gray-900 leading-tight">ChatGPT 注册管理</h1>
+        <p class="text-xs text-gray-400 mt-0.5">批量注册 · 账号管理 · Token 管理</p>
+      </div>
+    </div>
+    <div id="header-actions" class="flex items-center gap-2">
+      <!-- 日志图标由 common.js 注入 -->
+      <div class="flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-full px-3 py-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <span class="text-xs text-green-700 font-medium">运行中</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导航 -->
+  <div class="flex gap-1 mb-5 bg-white rounded-xl border border-gray-200 p-1 w-fit shadow-sm">
+    <a href="/"         class="tab-btn active">⚙️ 配置</a>
+    <a href="/register" class="tab-btn">📝 批量注册</a>
+    <a href="/accounts" class="tab-btn">👥 账号列表</a>
+    <a href="/tokens"   class="tab-btn">🔑 Token 列表</a>
+  </div>
+
+  <!-- 配置表单 -->
+  <div class="card p-6">
+    <h2 class="font-semibold text-gray-800 mb-1">配置管理</h2>
+    <p class="text-xs text-gray-400 mb-4">修改后点击保存，新任务自动读取最新配置</p>
+    <form id="config-form" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+      <div class="col-span-2 section-label">邮箱服务 (tmail)</div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">API 地址</label>
+        <input name="tmail_api_base" type="text" class="inp" placeholder="https://tmail-api.example.com" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">管理员密码</label>
+        <input name="tmail_admin_auth" type="text" class="inp" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">邮箱域名</label>
+        <input name="tmail_domain" type="text" class="inp" placeholder="example.com" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">自定义 Auth</label>
+        <input name="tmail_custom_auth" type="text" class="inp" /></div>
+
+      <div class="col-span-2 section-label">注册设置</div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">默认注册数量</label>
+        <input name="total_accounts" type="number" min="1" class="inp" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">代理地址</label>
+        <input name="proxy" type="text" class="inp" placeholder="http://127.0.0.1:7890" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">账号输出文件</label>
+        <input name="output_file" type="text" class="inp" placeholder="registered_accounts.txt" /></div>
+
+      <div class="col-span-2 section-label">OAuth 设置</div>
+      <div class="col-span-2 flex items-center gap-6">
+        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+          <input name="enable_oauth" type="checkbox" /> 启用 OAuth
+        </label>
+        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+          <input name="oauth_required" type="checkbox" /> OAuth 必须成功
+        </label>
+      </div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">Issuer</label>
+        <input name="oauth_issuer" type="text" class="inp" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">Client ID</label>
+        <input name="oauth_client_id" type="text" class="inp" /></div>
+      <div class="col-span-2"><label class="block text-xs font-medium text-gray-600 mb-1.5">Redirect URI</label>
+        <input name="oauth_redirect_uri" type="text" class="inp" /></div>
+
+      <div class="col-span-2 section-label">Token 文件</div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">AK 文件</label>
+        <input name="ak_file" type="text" class="inp" placeholder="ak.txt" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">RK 文件</label>
+        <input name="rk_file" type="text" class="inp" placeholder="rk.txt" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">Token JSON 目录</label>
+        <input name="token_json_dir" type="text" class="inp" placeholder="codex_tokens" /></div>
+
+      <div class="col-span-2 section-label">上传接口（可选，留空则不上传）</div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">上传 API URL</label>
+        <input name="upload_api_url" type="text" class="inp" /></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1.5">上传 API Token</label>
+        <input name="upload_api_token" type="text" class="inp" /></div>
+
+      <div class="col-span-2 pt-3 flex items-center gap-3 border-t mt-2">
+        <button type="submit" class="btn btn-primary">保存配置</button>
+        <span id="config-msg" class="text-xs"></span>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+async function loadConfig() {
+  try {
+    const cfg = await api('GET', '/api/config');
+    const form = document.getElementById('config-form');
+    Object.entries(cfg).forEach(([k, v]) => {
+      const el = form.elements[k];
+      if (!el) return;
+      if (el.type === 'checkbox') el.checked = Boolean(v);
+      else el.value = v ?? '';
+    });
+  } catch (e) { showToast('加载配置失败: ' + e.message, 'error'); }
+}
+
+document.getElementById('config-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = {};
+  Array.from(e.target.elements).forEach(el => {
+    if (!el.name) return;
+    if (el.type === 'checkbox') data[el.name] = el.checked;
+    else if (el.type === 'number') data[el.name] = el.value === '' ? '' : Number(el.value);
+    else data[el.name] = el.value;
+  });
+  try {
+    await api('POST', '/api/config', data);
+    const msg = document.getElementById('config-msg');
+    msg.textContent = '✓ 已保存'; msg.className = 'text-xs text-green-600';
+    setTimeout(() => { msg.textContent = ''; }, 2500);
+    showToast('配置已保存');
+  } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
+});
+
+loadConfig();
+</script>
+</body>
+</html>
