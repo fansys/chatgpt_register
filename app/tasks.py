@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
-TASKS_FILE = BASE_DIR / "tasks.json"
+TASKS_FILE = BASE_DIR / "data/tasks.json"
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
