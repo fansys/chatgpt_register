@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ChatGPT 注册管理 · Token 列表</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="min-h-screen">
+
+<div class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- 页头 -->
+  <div class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm">C</div>
+      <div>
+        <h1 class="text-[17px] font-bold text-gray-900 leading-tight">ChatGPT 注册管理</h1>
+        <p class="text-xs text-gray-400 mt-0.5">批量注册 · 账号管理 · Token 管理</p>
+      </div>
+    </div>
+    <div id="header-actions" class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-full px-3 py-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <span class="text-xs text-green-700 font-medium">运行中</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导航 -->
+  <div class="flex gap-1 mb-5 bg-white rounded-xl border border-gray-200 p-1 w-fit shadow-sm">
+    <a href="/"         class="tab-btn">⚙️ 配置</a>
+    <a href="/register" class="tab-btn">📝 批量注册</a>
+    <a href="/accounts" class="tab-btn">👥 账号列表</a>
+    <a href="/tokens"   class="tab-btn active">🔑 Token 列表</a>
+  </div>
+
+  <!-- Token 列表 -->
+  <div class="card p-6">
+    <!-- 工具栏 -->
+    <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+      <div class="flex items-center gap-2">
+        <h2 class="font-semibold text-gray-800">Token 列表</h2>
+        <span id="tok-count-badge" class="badge badge-gray hidden"></span>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <span id="tok-sel-tip" class="text-xs text-gray-400 hidden">已选 <b id="tok-sel-n">0</b> 个</span>
+        <button id="tok-batch-refresh-btn" onclick="batchRefresh()" class="btn btn-primary btn-sm hidden">↻ 批量刷新</button>
+        <button id="tok-batch-upload-btn" onclick="batchUpload()" class="btn btn-upload btn-sm hidden">↑ 批量上传</button>
+        <button id="tok-export-btn" onclick="exportAccessTokens()" class="btn btn-ghost btn-sm">↓ 导出 AccessToken</button>
+        <button onclick="loadTokens()" class="btn btn-ghost btn-sm">↺ 刷新列表</button>
+      </div>
+    </div>
+
+    <!-- 过滤栏 -->
+    <div class="filter-bar">
+      <input id="tok-search" type="text" class="filter-inp flex-1 min-w-44" placeholder="🔍 搜索邮箱…" oninput="applyFilters()" />
+      <select id="tok-expired-filter" class="filter-sel" onchange="applyFilters()">
+        <option value="">全部</option>
+        <option value="valid">未过期</option>
+        <option value="expired">已过期</option>
+      </select>
+      <span id="tok-filter-tip" class="text-xs text-gray-400 hidden"></span>
+    </div>
+
+    <!-- 表格 -->
+    <div class="overflow-x-auto rounded-xl border border-gray-100">
+      <table>
+        <thead>
+          <tr>
+            <th class="w-10 text-center"><input type="checkbox" id="tok-all" onchange="toggleAll(this)" /></th>
+            <th>#</th>
+            <th class="sortable" onclick="sortBy('email')">邮箱<span class="sort-icon" id="sort-email">⇅</span></th>
+            <th>Access Token</th>
+            <th class="sortable" onclick="sortBy('last_refresh')">最后刷新<span class="sort-icon" id="sort-last_refresh">⇅</span></th>
+            <th class="sortable" onclick="sortBy('expired')">过期时间<span class="sort-icon" id="sort-expired">⇅</span></th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tok-tbody"></tbody>
+      </table>
+      <div id="tok-empty" class="text-center py-12 text-gray-400 text-sm hidden">暂无 Token 记录</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+let _tokens = [];
+let _uploadEnabled = false;
+const _state = { search: '', expired: '', sort: null, dir: 'asc' };
+
+async function loadTokens() {
+  try {
+    const [cfg, toks] = await Promise.all([api('GET', '/api/config'), api('GET', '/api/tokens')]);
+    _uploadEnabled = !!(cfg.upload_api_url);
+    _tokens = toks;
+    applyFilters();
+  } catch (e) { showToast('加载 Token 失败: ' + e.message, 'error'); }
+}
+
+function applyFilters() {
+  const search  = (document.getElementById('tok-search')?.value ?? '').toLowerCase().trim();
+  const expired = document.getElementById('tok-expired-filter')?.value ?? '';
+  _state.search = search; _state.expired = expired;
+
+  let rows = _tokens.filter(t => {
+    if (search && !t.email.toLowerCase().includes(search)) return false;
+    if (expired === 'expired') return isExpired(t.expired);
+    if (expired === 'valid')   return !isExpired(t.expired);
+    return true;
+  });
+  rows = _sortedBy(rows, _state.sort, _state.dir);
+
+  const tip = document.getElementById('tok-filter-tip');
+  if (rows.length < _tokens.length) {
+    tip.textContent = `显示 ${rows.length} / ${_tokens.length}`; tip.classList.remove('hidden');
+  } else { tip.classList.add('hidden'); }
+
+  renderRows(rows);
+}
+
+function sortBy(field) {
+  if (_state.sort === field) { _state.dir = _state.dir === 'asc' ? 'desc' : 'asc'; }
+  else { _state.sort = field; _state.dir = 'asc'; }
+  _setSortIcon('sort', field, _state.dir);
+  applyFilters();
+}
+
+function renderRows(tokens) {
+  const tbody = document.getElementById('tok-tbody');
+  const badge = document.getElementById('tok-count-badge');
+  tbody.innerHTML = '';
+  badge.textContent = `${_tokens.length} 个`;
+  badge.classList.toggle('hidden', _tokens.length === 0);
+  if (!tokens.length) { document.getElementById('tok-empty').classList.remove('hidden'); updateSelection(); return; }
+  document.getElementById('tok-empty').classList.add('hidden');
+
+  tokens.forEach((t, i) => {
+    const expired = isExpired(t.expired);
+    const preview = t.access_token ? t.access_token.slice(0, 22) + '…' : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="text-center"><input type="checkbox" class="tok-ck" value="${esc(t.email)}" onchange="updateSelection()" /></td>
+      <td class="text-gray-400 text-xs">${i + 1}</td>
+      <td class="font-medium text-gray-800 text-xs">${esc(t.email)}</td>
+      <td>
+        <div class="flex items-center gap-1.5">
+          <code class="font-mono text-xs text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded max-w-[160px] truncate block" title="${esc(t.access_token)}">${preview}</code>
+          ${t.access_token ? `<button onclick="copyText('${esc(t.access_token)}')" class="text-blue-400 hover:text-blue-600 text-xs flex-shrink-0">复制</button>` : ''}
+        </div>
+      </td>
+      <td class="text-xs text-gray-500">${fmtTime(t.last_refresh || t.updated)}</td>
+      <td class="text-xs ${expired ? 'text-red-500 font-semibold' : 'text-gray-500'}">
+        ${fmtTime(t.expired)}
+        ${expired ? ' <span class="badge badge-red">已过期</span>' : ''}
+      </td>
+      <td>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button onclick="viewJson('${esc(t.email)}')" class="btn btn-ghost btn-sm">{ } JSON</button>
+          <button onclick="refreshOne('${esc(t.email)}')" class="btn btn-ghost btn-sm">↻ 刷新</button>
+          ${_uploadEnabled ? `<button onclick="uploadOne('${esc(t.email)}')" class="btn btn-upload btn-sm">↑ 上传</button>` : ''}
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  updateSelection();
+}
+
+function toggleAll(cb) { $$('.tok-ck').forEach(c => { c.checked = cb.checked; }); updateSelection(); }
+
+function updateSelection() {
+  const all = [...$$('.tok-ck')];
+  const sel = all.filter(c => c.checked);
+  const n = sel.length;
+  document.getElementById('tok-sel-tip').classList.toggle('hidden', n === 0);
+  document.getElementById('tok-batch-refresh-btn').classList.toggle('hidden', n === 0);
+  document.getElementById('tok-batch-upload-btn').classList.toggle('hidden', n === 0 || !_uploadEnabled);
+  const allCb = document.getElementById('tok-all');
+  if (n > 0) {
+    document.getElementById('tok-sel-n').textContent = n;
+    document.getElementById('tok-batch-refresh-btn').textContent = `↻ 批量刷新 (${n})`;
+    document.getElementById('tok-batch-upload-btn').textContent = `↑ 批量上传 (${n})`;
+  }
+  allCb.indeterminate = n > 0 && n < all.length;
+  allCb.checked = n > 0 && n === all.length;
+}
+
+async function viewJson(email) {
+  try {
+    const data = await api('GET', `/api/tokens/${encodeURIComponent(email)}`);
+    openModal(`Token JSON — ${email}`, JSON.stringify(data, null, 2));
+  } catch (e) { showToast('获取失败: ' + e.message, 'error'); }
+}
+
+async function refreshOne(email) {
+  try {
+    const { task_id } = await api('POST', '/api/refresh', { email });
+    const entry = openLog(`刷新 ${email}`);
+    startPolling(task_id, entry, t => {
+      if (t.status === 'done') { showToast(`✓ ${email} Token 已刷新`); setTimeout(loadTokens, 600); }
+      else { showToast('刷新失败', 'error'); }
+    });
+  } catch (e) { showToast('提交失败: ' + e.message, 'error'); }
+}
+
+async function batchRefresh() {
+  const emails = [...$$('.tok-ck:checked')].map(c => c.value);
+  if (!emails.length) return;
+  const btn = document.getElementById('tok-batch-refresh-btn'); btn.disabled = true;
+  try {
+    const { task_id } = await api('POST', '/api/refresh-batch', { emails });
+    const entry = openLog(`批量刷新 ×${emails.length}`);
+    startPolling(task_id, entry, t => {
+      btn.disabled = false;
+      if (t.status === 'done') {
+        showToast(`批量刷新完成：成功 ${t.result?.ok ?? '?'} | 失败 ${t.result?.fail ?? '?'}`);
+        setTimeout(loadTokens, 800);
+      } else { showToast('批量刷新出错', 'error'); btn.disabled = false; }
+    });
+  } catch (e) { showToast('启动失败: ' + e.message, 'error'); btn.disabled = false; }
+}
+
+async function uploadOne(email) {
+  showToast(`上传 ${email}...`);
+  try {
+    await api('POST', '/api/upload-token', { email });
+    showToast(`✓ ${email} 已上传`);
+  } catch (e) { showToast('上传失败: ' + e.message, 'error'); }
+}
+
+async function batchUpload() {
+  const emails = [...$$('.tok-ck:checked')].map(c => c.value);
+  if (!emails.length) return;
+  const btn = document.getElementById('tok-batch-upload-btn'); btn.disabled = true;
+  showToast(`正在上传 ${emails.length} 个 Token...`);
+  try {
+    const results = await api('POST', '/api/upload-batch', { emails });
+    const ok = Object.values(results).filter(v => v === 'ok').length;
+    showToast(`上传完成：成功 ${ok} | 失败 ${emails.length - ok}`);
+  } catch (e) { showToast('上传失败: ' + e.message, 'error'); }
+  finally { btn.disabled = false; }
+}
+
+function exportAccessTokens() {
+  const selected = [...$$('.tok-ck:checked')].map(c => c.value);
+  const source = selected.length > 0
+    ? _tokens.filter(t => selected.includes(t.email))
+    : _tokens.filter(t => {
+        if (_state.search && !t.email.toLowerCase().includes(_state.search)) return false;
+        if (_state.expired === 'expired') return isExpired(t.expired);
+        if (_state.expired === 'valid') return !isExpired(t.expired);
+        return true;
+      });
+  const lines = source.map(t => t.access_token).filter(Boolean);
+  if (!lines.length) { showToast('没有可导出的 AccessToken', 'error'); return; }
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `access_tokens_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`已导出 ${lines.length} 个 AccessToken`);
+}
+
+loadTokens();
+</script>
+</body>
+</html>

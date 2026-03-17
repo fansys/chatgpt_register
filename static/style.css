@@ -1,0 +1,102 @@
+/* ── 全局基础 ─────────────────────────────────────────────── */
+body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; }
+.log-box { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.7; }
+
+/* ── 导航标签 ─────────────────────────────────────────────── */
+.tab-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 15px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all .15s; border: none; background: transparent;
+  color: #64748b; text-decoration: none; white-space: nowrap;
+}
+.tab-btn:hover { background: #e2e8f0; color: #334155; }
+.tab-btn.active { background: #1e40af; color: #fff; box-shadow: 0 2px 8px #1e40af40; }
+
+/* ── 卡片 ─────────────────────────────────────────────────── */
+.card { background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px #0000000a; }
+
+/* ── 表格 ─────────────────────────────────────────────────── */
+table { border-collapse: separate; border-spacing: 0; width: 100%; }
+thead th {
+  background: #f8fafc; font-size: 11px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; color: #94a3b8;
+  padding: 10px 14px; white-space: nowrap;
+}
+thead th:first-child { border-radius: 10px 0 0 0; }
+thead th:last-child  { border-radius: 0 10px 0 0; }
+tbody tr { transition: background .1s; }
+tbody tr:hover td { background: #f8fafc; }
+tbody td { padding: 9px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155; vertical-align: middle; }
+
+/* ── 输入框 ───────────────────────────────────────────────── */
+.inp {
+  width: 100%; border: 1px solid #cbd5e1; border-radius: 8px;
+  padding: 7px 11px; font-size: 13px; color: #1e293b; outline: none;
+  transition: border-color .15s, box-shadow .15s; background: #fff;
+}
+.inp:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px #3b82f618; }
+.inp::placeholder { color: #94a3b8; }
+
+/* ── 按钮 ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all .15s; border: none; white-space: nowrap;
+}
+.btn-primary { background: #2563eb; color: #fff; }  .btn-primary:hover { background: #1d4ed8; }
+.btn-success { background: #16a34a; color: #fff; }  .btn-success:hover { background: #15803d; }
+.btn-ghost   { background: #f1f5f9; color: #475569; } .btn-ghost:hover   { background: #e2e8f0; }
+.btn-upload  { background: #eff6ff; color: #1d4ed8; } .btn-upload:hover  { background: #dbeafe; }
+.btn-danger  { background: #fee2e2; color: #dc2626; } .btn-danger:hover  { background: #fecaca; }
+.btn:disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
+.btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
+
+/* ── 徽章 ─────────────────────────────────────────────────── */
+.badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.badge-green  { background: #dcfce7; color: #15803d; }
+.badge-orange { background: #fff7ed; color: #c2410c; }
+.badge-red    { background: #fee2e2; color: #dc2626; }
+.badge-gray   { background: #f1f5f9; color: #64748b; }
+.badge-blue   { background: #dbeafe; color: #1d4ed8; }
+
+/* ── 分区标签 ─────────────────────────────────────────────── */
+.section-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .05em; color: #94a3b8;
+  padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 12px; margin-top: 18px;
+}
+
+/* ── 复选框 ───────────────────────────────────────────────── */
+input[type=checkbox] { width: 15px; height: 15px; accent-color: #2563eb; cursor: pointer; }
+
+/* ── 排序列头 ─────────────────────────────────────────────── */
+thead th.sortable { cursor: pointer; user-select: none; }
+thead th.sortable:hover { background: #f1f5f9; color: #475569; }
+.sort-icon { display: inline-block; width: 14px; text-align: center; font-size: 10px; color: #cbd5e1; }
+thead th.sort-asc  .sort-icon,
+thead th.sort-desc .sort-icon { color: #2563eb; }
+
+/* ── 过滤栏 ───────────────────────────────────────────────── */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-inp {
+  border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px;
+  font-size: 12px; color: #334155; outline: none; transition: border-color .15s; background: #fff;
+}
+.filter-inp:focus { border-color: #3b82f6; }
+.filter-sel { border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; font-size: 12px; color: #334155; outline: none; background: #fff; cursor: pointer; }
+
+/* ── 日志面板 ─────────────────────────────────────────────── */
+.log-panel { border-radius: 12px; overflow: hidden; border: 1px solid #1e293b; }
+.log-panel-header { background: #0f172a; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; }
+
+/* ── 日志 Tab 按钮 ────────────────────────────────────────── */
+.log-tab-btn {
+  display: inline-flex; align-items: center;
+  padding: 4px 8px 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500;
+  border: none; background: transparent; color: #64748b;
+  white-space: nowrap; transition: all .12s; flex-shrink: 0; max-width: 200px;
+}
+.log-tab-btn:hover { background: #1e293b; color: #cbd5e1; }
+.log-tab-btn.active { background: #334155; color: #f1f5f9; }
+.log-tab-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
