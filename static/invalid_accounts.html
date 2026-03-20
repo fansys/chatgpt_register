@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ChatGPT 注册管理 · 失效列表</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="min-h-screen">
+
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <div class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm">C</div>
+      <div>
+        <h1 class="text-[17px] font-bold text-gray-900 leading-tight">ChatGPT 注册管理</h1>
+        <p class="text-xs text-gray-400 mt-0.5">批量注册 · 账号管理 · Token 管理</p>
+      </div>
+    </div>
+    <div id="header-actions" class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-full px-3 py-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <span class="text-xs text-green-700 font-medium">运行中</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-1 mb-5 bg-white rounded-xl border border-gray-200 p-1 w-fit shadow-sm">
+    <a href="/"                class="tab-btn">⚙️ 配置</a>
+    <a href="/register"        class="tab-btn">📝 批量注册</a>
+    <a href="/accounts"        class="tab-btn">👥 账号列表</a>
+    <a href="/tokens"          class="tab-btn">🔑 Token 列表</a>
+    <a href="/invalid-accounts" class="tab-btn active">🚫 失效列表</a>
+  </div>
+
+  <div class="card p-6">
+    <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+      <div class="flex items-center gap-2">
+        <h2 class="font-semibold text-gray-800">失效账号列表</h2>
+        <span id="inv-count" class="badge badge-gray hidden"></span>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <span id="inv-sel-tip" class="text-xs text-gray-400 hidden">已选 <b id="inv-sel-n">0</b> 个</span>
+        <button id="inv-batch-del" onclick="batchDeleteInvalid(true)" class="btn btn-danger btn-sm hidden">删除选中</button>
+        <button id="inv-batch-clear" onclick="batchDeleteInvalid(false)" class="btn btn-ghost btn-sm hidden">移除选中记录</button>
+        <button onclick="loadInvalidAccounts()" class="btn btn-ghost btn-sm">↺ 刷新列表</button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <input id="inv-search" type="text" class="filter-inp flex-1 min-w-44" placeholder="🔍 搜索邮箱…" oninput="applyFilters()" />
+      <select id="inv-cpa-filter" class="filter-sel" onchange="applyFilters()">
+        <option value="">CPA 删除状态</option>
+        <option value="ok">已删</option>
+        <option value="fail">未删/失败</option>
+      </select>
+      <span id="inv-filter-tip" class="text-xs text-gray-400 hidden"></span>
+    </div>
+
+    <div class="overflow-x-auto rounded-xl border border-gray-100">
+      <table>
+        <thead>
+          <tr>
+            <th class="w-10 text-center"><input type="checkbox" id="inv-all" onchange="toggleAll(this)" /></th>
+            <th>#</th>
+            <th>邮箱</th>
+            <th>原因</th>
+            <th>来源</th>
+            <th>CPA 记录</th>
+            <th>发现时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="inv-tbody"></tbody>
+      </table>
+      <div id="inv-empty" class="text-center py-12 text-gray-400 text-sm hidden">暂无失效账号</div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+let _invalidRows = [];
+
+async function loadInvalidAccounts() {
+  try {
+    _invalidRows = await api('GET', '/api/invalid-accounts');
+    applyFilters();
+  } catch (e) {
+    showRequestError(e);
+  }
+}
+
+function applyFilters() {
+  const search = (document.getElementById('inv-search')?.value ?? '').toLowerCase().trim();
+  const cpa = document.getElementById('inv-cpa-filter')?.value ?? '';
+  let rows = _invalidRows.filter(r => {
+    const email = (r.email || '').toLowerCase();
+    if (search && !email.includes(search)) return false;
+    if (cpa === 'ok') return !!r.cpa_deleted;
+    if (cpa === 'fail') return !r.cpa_deleted;
+    return true;
+  });
+
+  const tip = document.getElementById('inv-filter-tip');
+  if (rows.length < _invalidRows.length) {
+    tip.textContent = `显示 ${rows.length} / ${_invalidRows.length}`;
+    tip.classList.remove('hidden');
+  } else {
+    tip.classList.add('hidden');
+  }
+
+  renderRows(rows);
+}
+
+function renderRows(rows) {
+  const tbody = document.getElementById('inv-tbody');
+  const badge = document.getElementById('inv-count');
+  tbody.innerHTML = '';
+  badge.textContent = `${_invalidRows.length} 条`;
+  badge.classList.toggle('hidden', _invalidRows.length === 0);
+
+  if (!rows.length) {
+    document.getElementById('inv-empty').classList.remove('hidden');
+    updateSelection();
+    return;
+  }
+  document.getElementById('inv-empty').classList.add('hidden');
+
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="text-center"><input type="checkbox" class="inv-ck" value="${esc(r.email)}" onchange="updateSelection()" /></td>
+      <td class="text-gray-400 text-xs">${i + 1}</td>
+      <td class="font-medium text-gray-800 text-xs">${esc(r.email)}</td>
+      <td class="text-xs text-gray-500 max-w-xs truncate" title="${esc(r.reason || '')}">${esc(r.reason || '—')}</td>
+      <td class="text-xs text-gray-500">${esc(r.source || '—')}</td>
+      <td class="text-xs">${r.cpa_deleted ? '<span class="badge badge-green">已删除</span>' : '<span class="badge badge-red">未删除</span>'}</td>
+      <td class="text-xs text-gray-500">${fmtTime(r.detected_at)}</td>
+      <td>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button onclick="deleteOne('${esc(r.email)}', true)" class="btn btn-danger btn-sm">删除账号</button>
+          <button onclick="deleteOne('${esc(r.email)}', false)" class="btn btn-ghost btn-sm">移除记录</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  updateSelection();
+}
+
+function toggleAll(cb) { $$('.inv-ck').forEach(c => { c.checked = cb.checked; }); updateSelection(); }
+
+function updateSelection() {
+  const all = [...$$('.inv-ck')];
+  const sel = all.filter(c => c.checked);
+  const n = sel.length;
+  document.getElementById('inv-sel-tip').classList.toggle('hidden', n === 0);
+  document.getElementById('inv-batch-del').classList.toggle('hidden', n === 0);
+  document.getElementById('inv-batch-clear').classList.toggle('hidden', n === 0);
+  if (n > 0) {
+    document.getElementById('inv-sel-n').textContent = n;
+    document.getElementById('inv-batch-del').textContent = `删除选中 (${n})`;
+    document.getElementById('inv-batch-clear').textContent = `移除选中记录 (${n})`;
+  }
+  const allCb = document.getElementById('inv-all');
+  allCb.indeterminate = n > 0 && n < all.length;
+  allCb.checked = n > 0 && n === all.length;
+}
+
+async function deleteOne(email, deleteLocal) {
+  const msg = deleteLocal
+    ? `确认删除账号：${email}？\n\n将删除本地账号、Token，并移除失效记录。`
+    : `确认仅移除失效记录：${email}？`;
+  const ok = await showConfirm(msg, '确认', deleteLocal);
+  if (!ok) return;
+  try {
+    await api('DELETE', `/api/invalid-accounts/${encodeURIComponent(email)}?delete_local=${deleteLocal ? 'true' : 'false'}`);
+    showToast(deleteLocal ? `已删除账号 ${email}` : `已移除失效记录 ${email}`);
+    loadInvalidAccounts();
+  } catch (e) {
+    showRequestError(e);
+  }
+}
+
+async function batchDeleteInvalid(deleteLocal) {
+  const emails = [...$$('.inv-ck:checked')].map(c => c.value);
+  if (!emails.length) return;
+  const msg = deleteLocal
+    ? `确认删除选中的 ${emails.length} 个账号？\n\n将删除本地账号、Token，并移除失效记录。`
+    : `确认仅移除选中的 ${emails.length} 条失效记录？`;
+  const ok = await showConfirm(msg, '确认', deleteLocal);
+  if (!ok) return;
+  try {
+    const res = await api('POST', '/api/invalid-accounts/delete-batch', { emails, delete_local: deleteLocal });
+    showToast(`完成：成功 ${res.deleted} | 失败 ${Object.keys(res.errors || {}).length}`);
+    loadInvalidAccounts();
+  } catch (e) {
+    showRequestError(e);
+  }
+}
+
+loadInvalidAccounts();
+</script>
+</body>
+</html>

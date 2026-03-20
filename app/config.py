@@ -21,6 +21,7 @@ DEFAULT_CONFIG: dict = {
     "oauth_client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
     "oauth_redirect_uri": "http://localhost:1455/auth/callback",
     "token_json_dir": "data/tokens",
+    "invalid_accounts_file": "data/invalid_accounts.json",
     "upload_api_url": "",
     "upload_api_token": "",
 }

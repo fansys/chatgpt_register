@@ -8,6 +8,7 @@ from pathlib import Path
 from app.config import BASE_DIR, read_config
 
 _accounts_file_lock = threading.Lock()
+_invalid_file_lock = threading.Lock()
 
 
 # ── 路径辅助 ──────────────────────────────────────────────────
@@ -21,6 +22,12 @@ def get_accounts_file() -> Path:
 def get_token_dir() -> Path:
     cfg = read_config()
     p = cfg.get("token_json_dir", "codex_tokens")
+    return Path(p) if Path(p).is_absolute() else BASE_DIR / p
+
+
+def get_invalid_accounts_file() -> Path:
+    cfg = read_config()
+    p = cfg.get("invalid_accounts_file", "data/invalid_accounts.json")
     return Path(p) if Path(p).is_absolute() else BASE_DIR / p
 
 
@@ -131,6 +138,81 @@ def delete_account(email: str) -> None:
     token_path = get_token_dir() / f"{email}.json"
     if token_path.exists():
         token_path.unlink()
+    remove_invalid_account(email)
+
+
+def _read_invalid_accounts(path: Path) -> list:
+    if not path.exists():
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _write_invalid_accounts(path: Path, items: list) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False, indent=2)
+
+
+def upsert_invalid_account(
+    email: str,
+    reason: str,
+    source: str = "",
+    cpa_deleted: bool = False,
+    cpa_delete_error: str = "",
+) -> None:
+    email = str(email or "").strip()
+    if not email:
+        return
+    now = datetime.now(tz=timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S+08:00")
+    path = get_invalid_accounts_file()
+    with _invalid_file_lock:
+        items = _read_invalid_accounts(path)
+        found = False
+        for it in items:
+            if str(it.get("email") or "").strip().lower() == email.lower():
+                it["reason"] = reason or it.get("reason", "")
+                it["source"] = source or it.get("source", "")
+                it["cpa_deleted"] = bool(cpa_deleted)
+                it["cpa_delete_error"] = cpa_delete_error or ""
+                it["detected_at"] = now
+                found = True
+                break
+        if not found:
+            items.append({
+                "email": email,
+                "reason": reason or "",
+                "source": source or "",
+                "cpa_deleted": bool(cpa_deleted),
+                "cpa_delete_error": cpa_delete_error or "",
+                "detected_at": now,
+            })
+        _write_invalid_accounts(path, items)
+
+
+def parse_invalid_accounts() -> list:
+    path = get_invalid_accounts_file()
+    with _invalid_file_lock:
+        items = _read_invalid_accounts(path)
+    items.sort(key=lambda x: str(x.get("detected_at") or ""), reverse=True)
+    return items
+
+
+def remove_invalid_account(email: str) -> None:
+    email = str(email or "").strip()
+    if not email:
+        return
+    path = get_invalid_accounts_file()
+    with _invalid_file_lock:
+        items = _read_invalid_accounts(path)
+        filtered = [it for it in items if str(it.get("email") or "").strip().lower() != email.lower()]
+        if len(filtered) == len(items):
+            return
+        _write_invalid_accounts(path, filtered)
 
 
 # ── Token 文件列表 ────────────────────────────────────────────

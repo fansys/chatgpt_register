@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.config import read_config
 from app.storage import get_token_dir
 from app.tasks import create_task
-from app.workers import run_register, run_refresh, run_batch_refresh
+from app.workers import run_register, run_refresh, run_batch_refresh, run_sync_cpa
 from app.lib.upload import CpaUploader
 
 router = APIRouter(prefix="/api", tags=["operations"])
@@ -32,6 +32,10 @@ class UploadTokenRequest(BaseModel):
 
 class BatchUploadRequest(BaseModel):
     emails: list[str]
+
+
+class SyncCpaRequest(BaseModel):
+    emails: list[str] = []
 
 
 @router.post("/register")
@@ -95,3 +99,10 @@ def upload_batch(req: BatchUploadRequest):
         except Exception as e:
             results[email] = str(e)
     return results
+
+
+@router.post("/sync-cpa")
+def sync_cpa(req: SyncCpaRequest):
+    task = create_task("sync-cpa")
+    _executor.submit(run_sync_cpa, task, req.emails)
+    return {"task_id": task["id"]}

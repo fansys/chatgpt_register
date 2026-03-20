@@ -1,22 +1,22 @@
 {
-  "_comment": "ChatGPT(DuckMail)",
+  "_comment": "ChatGPT(tmail)",
 
-  "total_accounts": 5,
+  "total_accounts": 0,
 
-  "duckmail_api_base": "https://api.duckmail.sbs",
-  "duckmail_bearer": "",
+  "tmail_api_base": "https://tmail.com",
+  "tmail_admin_auth": "",
+  "tmail_domain": "abc.com",
+  "tmail_custom_auth": "",
 
-  "proxy": "",
+  "proxy": "http://127.0.0.1:1080",
 
-  "output_file": "registered_accounts.txt",
+  "output_file": "data/accounts.json",
   "enable_oauth": true,
   "oauth_required": true,
   "oauth_issuer": "https://auth.openai.com",
   "oauth_client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
   "oauth_redirect_uri": "http://localhost:1455/auth/callback",
-  "ak_file": "ak.txt",
-  "rk_file": "rk.txt",
-  "token_json_dir": "codex_tokens",
-  "upload_api_url": "http://localhost:8317/v0/management/auth-files",
-  "upload_api_token": "你的cpa面板登录密码"
+  "token_json_dir": "data/tokens",
+  "upload_api_url": "https://cpa.com/v0/management/auth-files",
+  "upload_api_token": ""
 }

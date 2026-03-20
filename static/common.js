@@ -61,6 +61,25 @@ function showToast(msg, type = 'ok') {
 }
 function copyText(text) { navigator.clipboard.writeText(text).then(() => showToast('已复制')); }
 
+function _errorText(err) {
+  if (!err) return 'unknown error';
+  if (typeof err === 'string') return err;
+  if (err.message) return err.message;
+  return String(err);
+}
+
+function showRequestError(err, prefix = '请求失败') {
+  showToast(`${prefix}: ${_errorText(err)}`, 'error');
+}
+
+function showTaskStartError(err) {
+  showRequestError(err, '任务启动失败');
+}
+
+function formatStats(stats, pairs) {
+  return pairs.map(([label, key, fallback = 0]) => `${label} ${stats?.[key] ?? fallback}`).join(' | ');
+}
+
 /* ─────────────────────────────────────────────────────────────────
    Confirm 模态窗
 ───────────────────────────────────────────────────────────────── */

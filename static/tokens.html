@@ -34,6 +34,7 @@
     <a href="/register" class="tab-btn">📝 批量注册</a>
     <a href="/accounts" class="tab-btn">👥 账号列表</a>
     <a href="/tokens"   class="tab-btn active">🔑 Token 列表</a>
+    <a href="/invalid-accounts" class="tab-btn">🚫 失效列表</a>
   </div>
 
   <!-- Token 列表 -->
@@ -46,9 +47,11 @@
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         <span id="tok-sel-tip" class="text-xs text-gray-400 hidden">已选 <b id="tok-sel-n">0</b> 个</span>
+        <button id="tok-sync-all-btn" onclick="syncCpaAll()" class="btn btn-cpa btn-sm hidden">◎ CPA 全量校验</button>
+        <button id="tok-batch-sync-btn" onclick="batchSyncCpa()" class="btn btn-cpa btn-sm hidden">◎ CPA 校验选中</button>
         <button id="tok-batch-refresh-btn" onclick="batchRefresh()" class="btn btn-primary btn-sm hidden">↻ 批量刷新</button>
-        <button id="tok-batch-upload-btn" onclick="batchUpload()" class="btn btn-upload btn-sm hidden">↑ 批量上传</button>
-        <button id="tok-export-btn" onclick="exportAccessTokens()" class="btn btn-ghost btn-sm">↓ 导出 AccessToken</button>
+        <button id="tok-batch-upload-btn" onclick="batchUpload()" class="btn btn-upload btn-sm hidden">↑ 上传选中</button>
+        <button id="tok-export-btn" onclick="exportAccessTokens()" class="btn btn-ghost btn-sm">↓ 导出 Access Token</button>
         <button onclick="loadTokens()" class="btn btn-ghost btn-sm">↺ 刷新列表</button>
       </div>
     </div>
@@ -90,15 +93,17 @@
 <script>
 let _tokens = [];
 let _uploadEnabled = false;
+let _syncEnabled = false;
 const _state = { search: '', expired: '', sort: null, dir: 'asc' };
 
 async function loadTokens() {
   try {
     const [cfg, toks] = await Promise.all([api('GET', '/api/config'), api('GET', '/api/tokens')]);
     _uploadEnabled = !!(cfg.upload_api_url);
+    _syncEnabled = !!(cfg.upload_api_url && cfg.upload_api_token);
     _tokens = toks;
     applyFilters();
-  } catch (e) { showToast('加载 Token 失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e, '加载 Token 失败'); }
 }
 
 function applyFilters() {
@@ -159,8 +164,9 @@ function renderRows(tokens) {
       </td>
       <td>
         <div class="flex items-center gap-1.5 flex-wrap">
-          <button onclick="viewJson('${esc(t.email)}')" class="btn btn-ghost btn-sm">{ } JSON</button>
+          <button onclick="viewJson('${esc(t.email)}')" class="btn btn-ghost btn-sm">查看 JSON</button>
           <button onclick="refreshOne('${esc(t.email)}')" class="btn btn-ghost btn-sm">↻ 刷新</button>
+          ${_syncEnabled ? `<button onclick="syncOne('${esc(t.email)}')" class="btn btn-cpa btn-sm">◎ CPA 校验</button>` : ''}
           ${_uploadEnabled ? `<button onclick="uploadOne('${esc(t.email)}')" class="btn btn-upload btn-sm">↑ 上传</button>` : ''}
         </div>
       </td>
@@ -177,13 +183,16 @@ function updateSelection() {
   const sel = all.filter(c => c.checked);
   const n = sel.length;
   document.getElementById('tok-sel-tip').classList.toggle('hidden', n === 0);
+  document.getElementById('tok-batch-sync-btn').classList.toggle('hidden', n === 0 || !_syncEnabled);
   document.getElementById('tok-batch-refresh-btn').classList.toggle('hidden', n === 0);
   document.getElementById('tok-batch-upload-btn').classList.toggle('hidden', n === 0 || !_uploadEnabled);
+  document.getElementById('tok-sync-all-btn').classList.toggle('hidden', !_syncEnabled);
   const allCb = document.getElementById('tok-all');
   if (n > 0) {
     document.getElementById('tok-sel-n').textContent = n;
+    document.getElementById('tok-batch-sync-btn').textContent = `◎ CPA 校验选中 (${n})`;
     document.getElementById('tok-batch-refresh-btn').textContent = `↻ 批量刷新 (${n})`;
-    document.getElementById('tok-batch-upload-btn').textContent = `↑ 批量上传 (${n})`;
+    document.getElementById('tok-batch-upload-btn').textContent = `↑ 上传选中 (${n})`;
   }
   allCb.indeterminate = n > 0 && n < all.length;
   allCb.checked = n > 0 && n === all.length;
@@ -193,7 +202,7 @@ async function viewJson(email) {
   try {
     const data = await api('GET', `/api/tokens/${encodeURIComponent(email)}`);
     openModal(`Token JSON — ${email}`, JSON.stringify(data, null, 2));
-  } catch (e) { showToast('获取失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e); }
 }
 
 async function refreshOne(email) {
@@ -201,10 +210,14 @@ async function refreshOne(email) {
     const { task_id } = await api('POST', '/api/refresh', { email });
     const entry = openLog(`刷新 ${email}`);
     startPolling(task_id, entry, t => {
-      if (t.status === 'done') { showToast(`✓ ${email} Token 已刷新`); setTimeout(loadTokens, 600); }
+      if (t.status === 'done') {
+        if (t.result?.invalid_marked) showToast(`[失效标记] ${email} 已加入失效列表`);
+        else showToast(`✓ ${email} Token 已刷新`);
+        setTimeout(loadTokens, 600);
+      }
       else { showToast('刷新失败', 'error'); }
     });
-  } catch (e) { showToast('提交失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e); }
 }
 
 async function batchRefresh() {
@@ -217,11 +230,47 @@ async function batchRefresh() {
     startPolling(task_id, entry, t => {
       btn.disabled = false;
       if (t.status === 'done') {
-        showToast(`批量刷新完成：成功 ${t.result?.ok ?? '?'} | 失败 ${t.result?.fail ?? '?'}`);
+        showToast(`批量刷新完成：${formatStats(t.result || {}, [['成功','ok'], ['失效标记','invalid_marked'], ['失败','fail']])}`);
         setTimeout(loadTokens, 800);
       } else { showToast('批量刷新出错', 'error'); btn.disabled = false; }
     });
-  } catch (e) { showToast('启动失败: ' + e.message, 'error'); btn.disabled = false; }
+  } catch (e) { showTaskStartError(e); btn.disabled = false; }
+}
+
+async function syncOne(email) {
+  return runSyncCpa([email], `CPA 校验 ${email}`);
+}
+
+async function batchSyncCpa() {
+  const emails = [...$$('.tok-ck:checked')].map(c => c.value);
+  if (!emails.length) return;
+  return runSyncCpa(emails, `CPA 校验选中 ×${emails.length}`);
+}
+
+async function syncCpaAll() {
+  return runSyncCpa([], 'CPA 全量校验');
+}
+
+async function runSyncCpa(emails, title) {
+  if (!_syncEnabled) {
+    showToast('请先在配置里设置 upload_api_url 和 upload_api_token', 'warn');
+    return;
+  }
+  try {
+    const { task_id } = await api('POST', '/api/sync-cpa', { emails: Array.isArray(emails) ? emails : [] });
+    const entry = openLog(title);
+    startPolling(task_id, entry, t => {
+      if (t.status !== 'done') {
+        showToast('CPA 同步任务失败', 'error');
+        return;
+      }
+      const r = t.result || {};
+      showToast(`CPA 同步完成：${formatStats(r, [['ok','ok'], ['刷新','refreshed_401'], ['失效标记','invalid_marked'], ['跳过补传','invalid_skip_upload'], ['补传','uploaded_missing']])}`);
+      setTimeout(loadTokens, 800);
+    });
+  } catch (e) {
+    showTaskStartError(e);
+  }
 }
 
 async function uploadOne(email) {
@@ -229,7 +278,7 @@ async function uploadOne(email) {
   try {
     await api('POST', '/api/upload-token', { email });
     showToast(`✓ ${email} 已上传`);
-  } catch (e) { showToast('上传失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e, '上传失败'); }
 }
 
 async function batchUpload() {
@@ -241,7 +290,7 @@ async function batchUpload() {
     const results = await api('POST', '/api/upload-batch', { emails });
     const ok = Object.values(results).filter(v => v === 'ok').length;
     showToast(`上传完成：成功 ${ok} | 失败 ${emails.length - ok}`);
-  } catch (e) { showToast('上传失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e, '上传失败'); }
   finally { btn.disabled = false; }
 }
 
@@ -256,7 +305,7 @@ function exportAccessTokens() {
         return true;
       });
   const lines = source.map(t => t.access_token).filter(Boolean);
-  if (!lines.length) { showToast('没有可导出的 AccessToken', 'error'); return; }
+  if (!lines.length) { showToast('没有可导出的 Access Token', 'warn'); return; }
   const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -264,7 +313,7 @@ function exportAccessTokens() {
   a.download = `access_tokens_${new Date().toISOString().slice(0,10)}.txt`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast(`已导出 ${lines.length} 个 AccessToken`);
+  showToast(`已导出 ${lines.length} 个 Access Token`);
 }
 
 loadTokens();

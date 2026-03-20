@@ -19,13 +19,14 @@ from app.routes.accounts import router as accounts_router
 from app.routes.tokens import router as tokens_router
 from app.routes.tasks import router as tasks_router
 from app.routes.operations import router as operations_router
+from app.routes.invalid_accounts import router as invalid_accounts_router
 
 # 安装 stdout 路由（将工作线程 print 捕获到任务日志）
 install_tee_stream()
 
 app = FastAPI(title="ChatGPT Register Manager")
 
-for _router in [config_router, accounts_router, tokens_router, tasks_router, operations_router]:
+for _router in [config_router, accounts_router, tokens_router, tasks_router, operations_router, invalid_accounts_router]:
     app.include_router(_router)
 
 STATIC_DIR = BASE_DIR / "static"
@@ -56,6 +57,11 @@ def page_accounts():
 @app.get("/tokens", response_class=HTMLResponse)
 def page_tokens():
     return _serve_page("tokens.html")
+
+
+@app.get("/invalid-accounts", response_class=HTMLResponse)
+def page_invalid_accounts():
+    return _serve_page("invalid_accounts.html")
 
 
 # 静态文件挂载（必须在页面路由之后）

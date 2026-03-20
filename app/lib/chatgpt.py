@@ -203,6 +203,7 @@ class ChatGPTRegister:
         })
         self.session.cookies.set("oai-did", self.device_id, domain="chatgpt.com")
         self._callback_url = None
+        self.oauth_last_error = ""
 
     # ── 日志 ─────────────────────────────────────────────────────
 
@@ -223,6 +224,9 @@ class ChatGPTRegister:
         prefix = f"[{self.tag}] " if self.tag else ""
         with print_lock:
             print(f"{prefix}{msg}")
+
+    def _set_oauth_error(self, msg: str) -> None:
+        self.oauth_last_error = str(msg or "").strip()
 
     # ── tmail 代理方法（保持外部 API 兼容）───────────────────────
 
@@ -622,6 +626,7 @@ class ChatGPTRegister:
 
     def perform_codex_oauth_login_http(self, email: str, password: str, mail_token: str = None):
         """执行 PKCE OAuth 流程，返回包含 access_token 的 dict 或 None"""
+        self.oauth_last_error = ""
         self._print("[OAuth] 开始执行 Codex OAuth 纯协议流程...")
         self.session.cookies.set("oai-did", self.device_id, domain=".auth.openai.com")
         self.session.cookies.set("oai-did", self.device_id, domain="auth.openai.com")
@@ -698,6 +703,7 @@ class ChatGPTRegister:
 
         _, authorize_final_url = _bootstrap()
         if not authorize_final_url:
+            self._set_oauth_error("oauth bootstrap failed")
             return None
 
         continue_referer = (authorize_final_url if authorize_final_url.startswith(self.oauth_issuer)
@@ -706,27 +712,32 @@ class ChatGPTRegister:
         self._print("[OAuth] 2/7 POST /api/accounts/authorize/continue")
         resp_continue = _post_continue(continue_referer)
         if resp_continue is None:
+            self._set_oauth_error("authorize/continue request failed")
             return None
         self._print(f"[OAuth] /authorize/continue -> {resp_continue.status_code}")
         if resp_continue.status_code == 400 and "invalid_auth_step" in (resp_continue.text or ""):
             self._print("[OAuth] invalid_auth_step，重新 bootstrap 重试")
             _, authorize_final_url = _bootstrap()
             if not authorize_final_url:
+                self._set_oauth_error("oauth bootstrap retry failed")
                 return None
             continue_referer = (authorize_final_url if authorize_final_url.startswith(self.oauth_issuer)
                                 else f"{self.oauth_issuer}/log-in")
             resp_continue = _post_continue(continue_referer)
             if resp_continue is None:
+                self._set_oauth_error("authorize/continue retry failed")
                 return None
             self._print(f"[OAuth] /authorize/continue(重试) -> {resp_continue.status_code}")
 
         if resp_continue.status_code != 200:
             self._print(f"[OAuth] 邮箱提交失败: {resp_continue.text[:180]}")
+            self._set_oauth_error(f"/authorize/continue -> {resp_continue.status_code}: {(resp_continue.text or '')[:200]}")
             return None
         try:
             continue_data = resp_continue.json()
         except Exception:
             self._print("[OAuth] authorize/continue 响应解析失败")
+            self._set_oauth_error("authorize/continue response parse failed")
             return None
 
         continue_url = continue_data.get("continue_url", "")
@@ -738,6 +749,7 @@ class ChatGPTRegister:
                                              self.ua, self.sec_ch_ua, self.impersonate)
         if not sentinel_pwd:
             self._print("[OAuth] password_verify sentinel 获取失败")
+            self._set_oauth_error("password_verify sentinel failed")
             return None
         h_verify = _json_headers(f"{self.oauth_issuer}/log-in/password")
         h_verify["openai-sentinel-token"] = sentinel_pwd
@@ -749,16 +761,19 @@ class ChatGPTRegister:
             )
         except Exception as e:
             self._print(f"[OAuth] password/verify 异常: {e}")
+            self._set_oauth_error(f"/password/verify exception: {e}")
             return None
 
         self._print(f"[OAuth] /password/verify -> {resp_verify.status_code}")
         if resp_verify.status_code != 200:
             self._print(f"[OAuth] 密码校验失败: {resp_verify.text[:180]}")
+            self._set_oauth_error(f"/password/verify -> {resp_verify.status_code}: {(resp_verify.text or '')[:200]}")
             return None
         try:
             verify_data = resp_verify.json()
         except Exception:
             self._print("[OAuth] password/verify 响应解析失败")
+            self._set_oauth_error("password/verify response parse failed")
             return None
 
         continue_url = verify_data.get("continue_url", "") or continue_url
@@ -774,6 +789,7 @@ class ChatGPTRegister:
             self._print("[OAuth] 4/7 检测到邮箱 OTP 验证")
             if not mail_token:
                 self._print("[OAuth] OAuth 阶段需要 OTP，但未提供 mail_token")
+                self._set_oauth_error("mail_token missing for email_otp_verification")
                 return None
             h_otp = _json_headers(f"{self.oauth_issuer}/email-verification")
             tried_codes: set = set()
@@ -812,10 +828,19 @@ class ChatGPTRegister:
                         )
                     except Exception as e:
                         self._print(f"[OAuth] email-otp/validate 异常: {e}")
+                        self._set_oauth_error(f"/email-otp/validate exception: {e}")
                         continue
                     self._print(f"[OAuth] /email-otp/validate -> {resp_otp.status_code}")
                     if resp_otp.status_code != 200:
                         self._print(f"[OAuth] OTP 无效: {resp_otp.text[:160]}")
+                        otp_text = (resp_otp.text or "")[:240]
+                        self._set_oauth_error(f"/email-otp/validate -> {resp_otp.status_code}: {otp_text}")
+                        lowered = otp_text.lower()
+                        if (
+                            resp_otp.status_code == 403
+                            and ("deleted or deactivated" in lowered or "do not have an account" in lowered)
+                        ):
+                            return None
                         continue
                     try:
                         otp_data = resp_otp.json()
@@ -830,6 +855,8 @@ class ChatGPTRegister:
                     time.sleep(2)
             if not otp_success:
                 self._print(f"[OAuth] OTP 验证失败，已尝试 {len(tried_codes)} 个验证码")
+                if not self.oauth_last_error:
+                    self._set_oauth_error("otp validation failed")
                 return None
 
         code = None
@@ -864,6 +891,7 @@ class ChatGPTRegister:
 
         if not code:
             self._print("[OAuth] 未获取到 authorization code")
+            self._set_oauth_error("authorization code missing")
             return None
 
         self._print("[OAuth] 7/7 POST /oauth/token")
@@ -878,14 +906,18 @@ class ChatGPTRegister:
         self._print(f"[OAuth] /oauth/token -> {token_resp.status_code}")
         if token_resp.status_code != 200:
             self._print(f"[OAuth] token 交换失败: {token_resp.status_code} {token_resp.text[:200]}")
+            self._set_oauth_error(f"/oauth/token -> {token_resp.status_code}: {(token_resp.text or '')[:240]}")
             return None
         try:
             data = token_resp.json()
         except Exception:
             self._print("[OAuth] token 响应解析失败")
+            self._set_oauth_error("/oauth/token response parse failed")
             return None
         if not data.get("access_token"):
             self._print("[OAuth] token 响应缺少 access_token")
+            self._set_oauth_error("/oauth/token missing access_token")
             return None
         self._print("[OAuth] Codex Token 获取成功")
+        self.oauth_last_error = ""
         return data

@@ -34,6 +34,7 @@
     <a href="/register" class="tab-btn active">📝 批量注册</a>
     <a href="/accounts" class="tab-btn">👥 账号列表</a>
     <a href="/tokens"   class="tab-btn">🔑 Token 列表</a>
+    <a href="/invalid-accounts" class="tab-btn">🚫 失效列表</a>
   </div>
 
   <!-- 注册控制 -->
@@ -57,7 +58,7 @@
   <div class="card p-6 mt-4">
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-gray-700">历史任务</h3>
-      <button onclick="loadTasks()" class="btn btn-ghost btn-sm">↺ 刷新</button>
+      <button onclick="loadTasks()" class="btn btn-ghost btn-sm">↺ 刷新列表</button>
     </div>
     <div class="overflow-x-auto rounded-xl border border-gray-100">
       <table>
@@ -84,6 +85,7 @@
 <script>
 const _statusLabel = { pending:'等待中', running:'运行中', done:'✓ 完成', error:'✗ 出错' };
 const _statusClass  = { pending:'badge-gray', running:'badge-blue', done:'badge-green', error:'badge-red' };
+const _typeLabel = { register:'批量注册', refresh:'刷新单个', 'refresh-batch':'批量刷新', 'sync-cpa':'CPA同步校验' };
 
 async function startRegister() {
   const btn = document.getElementById('reg-btn');
@@ -105,7 +107,7 @@ async function startRegister() {
       setTimeout(loadTasks, 600);
     });
   } catch (e) {
-    showToast('启动失败: ' + e.message, 'error');
+    showTaskStartError(e);
     btn.disabled = false;
     document.getElementById('reg-tip').textContent = '';
   }
@@ -125,7 +127,7 @@ async function loadTasks() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="font-mono text-xs text-gray-500">${esc(t.id)}</td>
-        <td class="text-xs">${esc(t.type)}</td>
+        <td class="text-xs">${esc(_typeLabel[t.type] || t.type)}</td>
         <td><span class="badge ${_statusClass[t.status] || 'badge-gray'}">${_statusLabel[t.status] || t.status}</span></td>
         <td class="text-xs text-gray-500">${fmtTime(t.started)}</td>
         <td class="text-xs text-gray-500">${fmtTime(t.ended)}</td>
@@ -134,7 +136,7 @@ async function loadTasks() {
       `;
       tbody.appendChild(tr);
     });
-  } catch (e) { showToast('加载任务失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e); }
 }
 
 loadTasks();

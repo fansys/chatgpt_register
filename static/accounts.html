@@ -34,6 +34,7 @@
     <a href="/register" class="tab-btn">📝 批量注册</a>
     <a href="/accounts" class="tab-btn active">👥 账号列表</a>
     <a href="/tokens"   class="tab-btn">🔑 Token 列表</a>
+    <a href="/invalid-accounts" class="tab-btn">🚫 失效列表</a>
   </div>
 
   <!-- 账号列表 -->
@@ -46,9 +47,11 @@
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         <span id="acc-sel-tip" class="text-xs text-gray-400 hidden">已选 <b id="acc-sel-n">0</b> 个</span>
-        <button id="acc-batch-btn" onclick="batchRefreshSelected()" class="btn btn-primary btn-sm hidden">↻ 刷新选中 Token</button>
+        <button id="acc-sync-all-btn" onclick="syncCpaAllFromAccounts()" class="btn btn-cpa btn-sm hidden">◎ CPA 全量校验</button>
+        <button id="acc-batch-sync-btn" onclick="batchSyncSelected()" class="btn btn-cpa btn-sm hidden">◎ CPA 校验选中</button>
+        <button id="acc-batch-btn" onclick="batchRefreshSelected()" class="btn btn-primary btn-sm hidden">↻ 刷新选中</button>
         <button id="acc-batch-del-btn" onclick="batchDeleteSelected()" class="btn btn-danger btn-sm hidden">删除选中</button>
-        <button onclick="loadAccounts()" class="btn btn-ghost btn-sm">↺ 刷新</button>
+        <button onclick="loadAccounts()" class="btn btn-ghost btn-sm">↺ 刷新列表</button>
       </div>
     </div>
 
@@ -59,6 +62,7 @@
         <option value="">全部状态</option>
         <option value="ok">正常</option>
         <option value="fail">失败</option>
+        <option value="invalid">失效</option>
         <option value="none">未知</option>
       </select>
       <span id="acc-filter-tip" class="text-xs text-gray-400 hidden"></span>
@@ -91,13 +95,16 @@
 <script src="/static/common.js"></script>
 <script>
 let _accounts = [];
+let _syncEnabled = false;
 const _state = { search: '', status: '', sort: null, dir: 'asc' };
 
 async function loadAccounts() {
   try {
-    _accounts = await api('GET', '/api/accounts');
+    const [cfg, accounts] = await Promise.all([api('GET', '/api/config'), api('GET', '/api/accounts')]);
+    _syncEnabled = !!(cfg.upload_api_url && cfg.upload_api_token);
+    _accounts = accounts;
     applyFilters();
-  } catch (e) { showToast('加载账号失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e, '加载账号失败'); }
 }
 
 function applyFilters() {
@@ -109,7 +116,8 @@ function applyFilters() {
     if (search && !acc.email.toLowerCase().includes(search)) return false;
     if (status === 'ok')   return acc.status?.includes('ok') && !acc.status?.includes('fail');
     if (status === 'fail') return acc.status?.includes('fail');
-    if (status === 'none') return !acc.status || (!acc.status.includes('ok') && !acc.status.includes('fail'));
+    if (status === 'invalid') return acc.status?.includes('invalid');
+    if (status === 'none') return !acc.status || (!acc.status.includes('ok') && !acc.status.includes('fail') && !acc.status.includes('invalid'));
     return true;
   });
   rows = _sortedBy(rows, _state.sort, _state.dir);
@@ -168,6 +176,7 @@ function renderRows(rows) {
       <td>
         <div class="flex items-center gap-1.5">
           <button onclick="refreshOne('${esc(acc.email)}')" class="btn btn-ghost btn-sm">↻ 刷新</button>
+          ${_syncEnabled ? `<button onclick="syncOneFromAccounts('${esc(acc.email)}')" class="btn btn-cpa btn-sm">◎ CPA 校验</button>` : ''}
           <button onclick="deleteOne('${esc(acc.email)}')" class="btn btn-danger btn-sm">删除</button>
         </div>
       </td>
@@ -184,11 +193,14 @@ function updateSelection() {
   const sel = all.filter(c => c.checked);
   const n = sel.length;
   document.getElementById('acc-sel-tip').classList.toggle('hidden', n === 0);
+  document.getElementById('acc-sync-all-btn').classList.toggle('hidden', !_syncEnabled);
+  document.getElementById('acc-batch-sync-btn').classList.toggle('hidden', n === 0 || !_syncEnabled);
   document.getElementById('acc-batch-btn').classList.toggle('hidden', n === 0);
   document.getElementById('acc-batch-del-btn').classList.toggle('hidden', n === 0);
   if (n > 0) {
     document.getElementById('acc-sel-n').textContent = n;
-    document.getElementById('acc-batch-btn').textContent = `↻ 刷新选中 Token (${n})`;
+    document.getElementById('acc-batch-sync-btn').textContent = `◎ CPA 校验选中 (${n})`;
+    document.getElementById('acc-batch-btn').textContent = `↻ 刷新选中 (${n})`;
     document.getElementById('acc-batch-del-btn').textContent = `删除选中 (${n})`;
   }
   const allCb = document.getElementById('acc-all');
@@ -201,10 +213,50 @@ async function refreshOne(email) {
     const { task_id } = await api('POST', '/api/refresh', { email });
     const entry = openLog(`刷新 ${email}`);
     startPolling(task_id, entry, t => {
-      if (t.status === 'done') { showToast(`✓ ${email} Token 已刷新`); setTimeout(loadAccounts, 800); }
+      if (t.status === 'done') {
+        if (t.result?.invalid_marked) showToast(`[失效标记] ${email} 已加入失效列表`);
+        else showToast(`✓ ${email} Token 已刷新`);
+        setTimeout(loadAccounts, 800);
+      }
       else { showToast('刷新失败', 'error'); }
     });
-  } catch (e) { showToast('提交失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e); }
+}
+
+async function syncOneFromAccounts(email) {
+  return runSyncCpaFromAccounts([email], `CPA 校验 ${email}`);
+}
+
+async function batchSyncSelected() {
+  const emails = [...$$('.acc-ck:checked')].map(c => c.value);
+  if (!emails.length) return;
+  return runSyncCpaFromAccounts(emails, `CPA 校验选中 ×${emails.length}`);
+}
+
+async function syncCpaAllFromAccounts() {
+  return runSyncCpaFromAccounts([], 'CPA 全量校验');
+}
+
+async function runSyncCpaFromAccounts(emails, title) {
+  if (!_syncEnabled) {
+    showToast('请先在配置里设置 upload_api_url 和 upload_api_token', 'warn');
+    return;
+  }
+  try {
+    const { task_id } = await api('POST', '/api/sync-cpa', { emails: Array.isArray(emails) ? emails : [] });
+    const entry = openLog(title);
+    startPolling(task_id, entry, t => {
+      if (t.status !== 'done') {
+        showToast('CPA 同步任务失败', 'error');
+        return;
+      }
+      const r = t.result || {};
+      showToast(`CPA 同步完成：${formatStats(r, [['ok','ok'], ['刷新','refreshed_401'], ['失效标记','invalid_marked'], ['跳过补传','invalid_skip_upload'], ['补传','uploaded_missing']])}`);
+      setTimeout(loadAccounts, 800);
+    });
+  } catch (e) {
+    showTaskStartError(e);
+  }
 }
 
 async function deleteOne(email) {
@@ -213,7 +265,7 @@ async function deleteOne(email) {
   try {
     await api('DELETE', `/api/accounts/${encodeURIComponent(email)}`);
     showToast(`✓ 已删除 ${email}`); loadAccounts();
-  } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e, '删除失败'); }
 }
 
 async function batchRefreshSelected() {
@@ -226,11 +278,11 @@ async function batchRefreshSelected() {
     startPolling(task_id, entry, t => {
       btn.disabled = false;
       if (t.status === 'done') {
-        showToast(`批量刷新完成：成功 ${t.result?.ok ?? '?'} | 失败 ${t.result?.fail ?? '?'}`);
+        showToast(`批量刷新完成：${formatStats(t.result || {}, [['成功','ok'], ['失效标记','invalid_marked'], ['失败','fail']])}`);
         setTimeout(loadAccounts, 800);
       } else { showToast('批量刷新出错', 'error'); btn.disabled = false; }
     });
-  } catch (e) { showToast('启动失败: ' + e.message, 'error'); btn.disabled = false; }
+  } catch (e) { showTaskStartError(e); btn.disabled = false; }
 }
 
 async function batchDeleteSelected() {
@@ -243,7 +295,7 @@ async function batchDeleteSelected() {
     const res = await api('POST', '/api/accounts/delete-batch', { emails });
     showToast(`✓ 已删除 ${res.deleted} 个账号${Object.keys(res.errors || {}).length ? `，${Object.keys(res.errors).length} 个失败` : ''}`);
     loadAccounts();
-  } catch (e) { showToast('批量删除失败: ' + e.message, 'error'); }
+  } catch (e) { showRequestError(e, '批量删除失败'); }
   finally { btn.disabled = false; }
 }
 
