@@ -180,8 +180,6 @@ class ChatGPTRegister:
             domain=cfg.get("tmail_domain", "awsl.uk"),
             custom_auth=cfg.get("tmail_custom_auth", ""),
             proxy=self.proxy,
-            ua=self.ua,
-            impersonate=self.impersonate,
             tag=tag,
         )
 

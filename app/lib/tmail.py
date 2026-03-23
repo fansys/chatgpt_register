@@ -21,8 +21,6 @@ class TmailClient:
         domain: str,
         custom_auth: str = "",
         proxy: str = "",
-        ua: str = "",
-        impersonate: str = "chrome131",
         tag: str = "",
     ):
         self.api_base = api_base.rstrip("/")
@@ -30,8 +28,6 @@ class TmailClient:
         self.domain = domain
         self.custom_auth = custom_auth
         self.proxy = proxy
-        self.ua = ua or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        self.impersonate = impersonate
         self.tag = tag
 
     def _print(self, msg: str) -> None:
@@ -40,9 +36,8 @@ class TmailClient:
             print(f"{prefix}{msg}")
 
     def _session(self) -> curl_requests.Session:
-        session = curl_requests.Session()
+        session = curl_requests.Session(impersonate="chrome131")
         session.headers.update({
-            "User-Agent": self.ua,
             "Accept": "application/json",
             "Content-Type": "application/json",
         })
@@ -77,7 +72,6 @@ class TmailClient:
                 json={"enablePrefix": False, "name": email_local, "domain": self.domain},
                 headers=self._admin_headers(),
                 timeout=15,
-                impersonate=self.impersonate,
             )
             if res.status_code not in [200, 201]:
                 raise Exception(f"创建邮箱失败: {res.status_code} - {res.text[:200]}")
@@ -101,7 +95,6 @@ class TmailClient:
                 json={"email": email, "password": hashed, "cf_token": ""},
                 headers=headers,
                 timeout=15,
-                impersonate=self.impersonate,
             )
             if res.status_code not in [200, 201]:
                 raise Exception(f"tmail 登录失败: {res.status_code} - {res.text[:200]}")
@@ -124,7 +117,6 @@ class TmailClient:
                 headers=self._user_headers(mail_token),
                 params=params,
                 timeout=15,
-                impersonate=self.impersonate,
             )
             if res.status_code == 200:
                 data = res.json()
@@ -145,7 +137,6 @@ class TmailClient:
                 f"{self.api_base}/user_api/mails/{msg_id}",
                 headers=self._user_headers(mail_token),
                 timeout=15,
-                impersonate=self.impersonate,
             )
             if res.status_code == 200:
                 return res.json()
